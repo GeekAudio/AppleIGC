@@ -24,6 +24,7 @@ extern "C" {
 }
 
 #include "AppleIGC.hpp"
+#include "igc/igc_rx_mbuf_validation.h"
 
 #define USE_HW_UDPCSUM 0
 #define CAN_RECOVER_STALL    0
@@ -1976,12 +1977,36 @@ static bool igc_add_rx_frag(struct igc_ring *rx_ring,
 #ifdef __APPLE__
     IOBufferMemoryDescriptor *page = rx_buffer->page;
 
-    unsigned char *va = (u8*)page->getBytesNoCopy() + rx_buffer->page_offset;
+    if (unlikely(!(mbuf_flags(skb) & M_PKTHDR))) {
+        pr_err("RX packet buffer missing M_PKTHDR before copyback, dropping frame\n");
+        return false;
+    }
+
     size_t orig_len = mbuf_pkthdr_len(skb);
+    u32 expected_len = 0;
+    if (unlikely(orig_len > UINT32_MAX ||
+                 !igc_rx_mbuf_compute_expected_len((u32)orig_len, size,
+                                                   &expected_len))) {
+        pr_err("RX packet length overflow before copyback: orig_len=%lu size=%u, dropping frame\n",
+               (unsigned long)orig_len, size);
+        return false;
+    }
+
+    unsigned char *va = (u8*)page->getBytesNoCopy() + rx_buffer->page_offset;
     if (unlikely(mbuf_copyback(skb, orig_len, size,
-                      va, MBUF_WAITOK))) {
+                      va, MBUF_DONTWAIT))) {
         pr_err("mbuf_copyback failed: orig_len=%lu size=%u, dropping frame\n",
                (unsigned long)orig_len, size);
+        return false;
+    }
+
+    u32 result_flags = mbuf_flags(skb);
+    u32 actual_len = (result_flags & M_PKTHDR) ? mbuf_pkthdr_len(skb) : 0;
+    if (unlikely(!igc_rx_mbuf_metadata_is_valid(
+                     (result_flags & M_PKTHDR) != 0,
+                     expected_len, actual_len))) {
+        pr_err("RX mbuf metadata invalid after copyback: expected=%u actual=%u flags=0x%x, dropping frame\n",
+               expected_len, actual_len, result_flags);
         return false;
     }
     return true;

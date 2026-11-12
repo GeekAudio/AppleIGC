@@ -1,0 +1,62 @@
+name: Build AppleIGC experimental release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out source and SDK
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Test RX mbuf metadata validation
+        run: |
+          clang++ -std=c++17 -Wall -Wextra -Werror \
+            tests/rx_mbuf_validation_test.cpp \
+            -o "$RUNNER_TEMP/rx_mbuf_validation_test"
+          "$RUNNER_TEMP/rx_mbuf_validation_test"
+
+      - name: Build AppleIGC
+        run: |
+          xcodebuild \
+            -project AppleIGC.xcodeproj \
+            -scheme AppleIGC \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$RUNNER_TEMP/DerivedData/Build/Products/Release/AppleIGC.kext" \
+            "$RUNNER_TEMP/AppleIGC.kext.zip"
+          shasum -a 256 "$RUNNER_TEMP/AppleIGC.kext.zip" \
+            > "$RUNNER_TEMP/SHA256SUMS"
+
+      - name: Save build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppleIGC-${{ github.ref_name }}
+          path: |
+            ${{ runner.temp }}/AppleIGC.kext.zip
+            ${{ runner.temp }}/SHA256SUMS
+
+      - name: Publish tagged build
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "$RUNNER_TEMP/AppleIGC.kext.zip" \
+            "$RUNNER_TEMP/SHA256SUMS" \
+            --title "AppleIGC $GITHUB_REF_NAME (experimental)" \
+            --notes-file .github/EXPERIMENTAL_RELEASE_NOTES.md \
+            --verify-tag --prerelease
