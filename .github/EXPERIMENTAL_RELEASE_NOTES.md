@@ -6,4 +6,4 @@ This is a hypothesis-driven hardening candidate, **not a confirmed fix** for the
 
 ## Separate compatibility reports
 
-Upstream issue #40 reports an I225-V rev02 MSI/no-RX problem, while reports in PR #38 include mixed outcomes. These are separate reports, and the relationship and cause are unverified. This candidate does not change MSI or INTx handling and does not claim to address that issue.
+Upstream [issue #40](https://github.com/SongXiaoXi/AppleIGC/issues/40) reports an I225-V rev02 MSI/no-RX problem, while reports in [PR #38](https://github.com/SongXiaoXi/AppleIGC/pull/38) include mixed outcomes. These are separate reports, and the relationship and cause are unverified. This candidate does not change MSI or INTx handling and does not claim to address that issue.
