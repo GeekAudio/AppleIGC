@@ -42,8 +42,11 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent \
             "$RUNNER_TEMP/DerivedData/Build/Products/Release/AppleIGC.kext" \
             "$RUNNER_TEMP/AppleIGC.kext.zip"
-          shasum -a 256 "$RUNNER_TEMP/AppleIGC.kext.zip" \
-            > "$RUNNER_TEMP/SHA256SUMS"
+          (
+            cd "$RUNNER_TEMP"
+            shasum -a 256 AppleIGC.kext.zip > SHA256SUMS
+            shasum -a 256 -c SHA256SUMS
+          )
 
       - name: Save build artifact
         uses: actions/upload-artifact@v4
